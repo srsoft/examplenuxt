@@ -1,28 +1,26 @@
-# Nuxt 3 builder
-FROM node:18-alpine as builder
-
-# Create app directory
-WORKDIR /app
-ADD . /app/
-
-# global install & update
-RUN npm install -g npm@10.4.0
-RUN npm i yarn
-
-RUN rm yarn.lock
-# RUN rm package-lock.json
-RUN yarn
-RUN yarn build
-
-# Nuxt 3 production
-FROM node:18-alpine
+# Use a large Node.js base image to build the application and name it "build"
+FROM node:18-alpine as build
 
 WORKDIR /app
-COPY --from=builder /app/.output  /app/.output
-ENV NITRO_PORT=3000
 
-ENV HOST 0.0.0.0
-EXPOSE 3000
+# Copy the package.json and package-lock.json files into the working directory before copying the rest of the files
+# This will cache the dependencies and speed up subsequent builds if the dependencies don't change
+COPY package*.json /app
 
-# start command
-CMD [ "node", ".output/server/index.mjs" ]
+# You might want to use yarn or pnpm instead
+RUN npm install
+
+COPY . /app
+
+RUN npm run build
+
+# Instead of using a node:18-alpine image, we are using a distroless image. These are provided by google: https://github.com/GoogleContainerTools/distroless
+FROM gcr.io/distroless/nodejs:18 as prod
+
+WORKDIR /app
+
+# Copy the built application from the "build" image into the "prod" image
+COPY --from=build /app/.output /app/.output
+
+# Since this image only contains node.js, we do not need to specify the node command and simply pass the path to the index.mjs file!
+CMD ["/app/.output/server/index.mjs"]
